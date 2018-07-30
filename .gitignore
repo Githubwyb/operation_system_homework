@@ -8,3 +8,9 @@
 !/thread/input.txt
 !/thread/*.c
 !/thread/*.h
+
+/process/*
+!/process/makefile
+!/process/input.txt
+!/process/*.c
+!/process/*.h
