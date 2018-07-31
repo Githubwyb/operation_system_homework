@@ -7,9 +7,12 @@
 #include <sys/syscall.h>
 #include <pthread.h>
 
-const char *const fileName = "input.txt";
+const char *const inputFileName = "input.txt";
+const char *const outputFileName = "output.txt";
 static unsigned int N = 0;
 static unsigned int M = 0;
+static unsigned int pulsNumber = 0;
+static unsigned long int plusResult = 0;
 
 int parseFile(void)
 {
@@ -19,9 +22,9 @@ int parseFile(void)
 
     do
     {
-        if ((pFile = fopen(fileName, "r")) == NULL)
+        if ((pFile = fopen(inputFileName, "r")) == NULL)
         {
-            LOG_ERROR("Can't open file %s", fileName);
+            LOG_ERROR("Can't open file %s", inputFileName);
             break;
         }
 
@@ -49,26 +52,82 @@ int parseFile(void)
         }
 
         fclose(pFile);
+        free(pStr);
         return 0;
     } while (0);
 
     fclose(pFile);
+    free(pStr);
     return -1;
 }
 
+int writeFile(void)
+{
+    FILE *pFile = NULL;
+    char *pStr = NULL;
+    int rc = 0;
+
+    do
+    {
+        if ((pFile = fopen(outputFileName, "w+")) == NULL)
+        {
+            LOG_ERROR("Can't open file %s", outputFileName);
+            break;
+        }
+
+        pStr = (char *)malloc(100);
+        if (pStr == NULL)
+        {
+            LOG_ERROR("malloc error");
+            break;
+        }
+
+        rc = fprintf(pFile, "%lu", plusResult);
+        if (rc <= 0)
+        {
+            LOG_ERROR("write file error, %d", rc);
+            break;
+        }
+
+        fclose(pFile);
+        free(pStr);
+        return 0;
+    } while (0);
+
+    fclose(pFile);
+    free(pStr);
+    return -1;
+}
+
+pthread_mutex_t m0;
+
 void *threadHandler(void *param)
 {
-    LOG_DEBUG("");
-    return NULL;
+    while (1)
+    {
+        unsigned int addNumber = 0;
+        pthread_mutex_lock(&m0);
+        if (++pulsNumber > M)
+        {
+            pulsNumber--;
+            pthread_mutex_unlock(&m0);
+            return NULL;
+        }
+        addNumber = pulsNumber;
+        plusResult += pulsNumber;
+        pthread_mutex_unlock(&m0);
+        LOG_DEBUG("add %d", addNumber);
+    }
 }
 
 int main(int argc, char const *argv[])
 {
     pthread_t pThread[100];
     int i = 0;
-    int runTime = 0;
     struct timespec timeSpecStart;
     struct timespec timeSpecEnd;
+    void *result;
+    plusResult = 0;
 
     LOG_DEBUG("Hello, gcc\n");
 
@@ -92,7 +151,6 @@ int main(int argc, char const *argv[])
     }
 
     // 等待线程结束
-    void *result;
     for (i = 0; i < N; i++)
     {
         if (pthread_join(pThread[i], &result) == -1)
@@ -102,9 +160,11 @@ int main(int argc, char const *argv[])
         }
     }
 
+    writeFile();
+    LOG_DEBUG("result %lu", plusResult);
+
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecEnd);
-    runTime = (timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000000 + (timeSpecEnd.tv_nsec - timeSpecStart.tv_nsec);
-    LOG_DEBUG("runtime %d ns", runTime);
+    LOG_DEBUG("runtime %d s, %d ns", (timeSpecEnd.tv_sec - timeSpecStart.tv_sec), timeSpecEnd.tv_nsec - timeSpecStart.tv_nsec);
 
     return 0;
 }
