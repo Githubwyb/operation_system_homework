@@ -161,9 +161,10 @@ int main(int argc, char const *argv[])
     }
 
     writeFile();
-    LOG_DEBUG("result %lu", plusResult);
 
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecEnd);
+    
+    LOG_DEBUG("result %lu", plusResult);
     LOG_DEBUG("runtime %d s, %d ns", (timeSpecEnd.tv_sec - timeSpecStart.tv_sec), timeSpecEnd.tv_nsec - timeSpecStart.tv_nsec);
 
     return 0;
