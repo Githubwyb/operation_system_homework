@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/syscall.h>
 #include <pthread.h>
 
@@ -116,7 +116,7 @@ void *threadHandler(void *param)
         addNumber = pulsNumber;
         plusResult += pulsNumber;
         pthread_mutex_unlock(&m0);
-        LOG_DEBUG("add %d", addNumber);
+        // LOG_DEBUG("add %d", addNumber);
     }
 }
 
@@ -124,14 +124,14 @@ int main(int argc, char const *argv[])
 {
     pthread_t pThread[100];
     int i = 0;
-    struct timespec timeSpecStart;
-    struct timespec timeSpecEnd;
+    struct timeval timeSpecStart;
+    struct timeval timeSpecEnd;
     void *result;
     plusResult = 0;
 
-    LOG_DEBUG("Hello, gcc\n");
+    LOG_DEBUG("Hello, gcc");
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecStart);
+    gettimeofday(&timeSpecStart, NULL);
 
     if (parseFile() != 0)
     {
@@ -162,10 +162,10 @@ int main(int argc, char const *argv[])
 
     writeFile();
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecEnd);
-    
+    gettimeofday(&timeSpecEnd, NULL);
+
     LOG_DEBUG("result %lu", plusResult);
-    LOG_DEBUG("runtime %d s, %d ns", (timeSpecEnd.tv_sec - timeSpecStart.tv_sec), timeSpecEnd.tv_nsec - timeSpecStart.tv_nsec);
+    LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
 
     return 0;
 }

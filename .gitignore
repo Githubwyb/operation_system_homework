@@ -2,6 +2,7 @@
 !/.gitignore
 !/process/
 !/thread/
+!ReadMe.md
 
 /thread/*
 !/thread/makefile
