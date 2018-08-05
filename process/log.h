@@ -6,13 +6,13 @@
 char *splitFileName(char *str);
 
 #define LOG_INFO(fmt, ...)                                                            \
-    printf("[%lu][I][%s:%d %s] " fmt, getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+    printf("[%lu][I][%s:%d %s] " fmt, (unsigned long int)getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
     printf("\r\n");
 #define LOG_DEBUG(fmt, ...)                                                           \
-    printf("[%lu][D][%s:%d %s] " fmt, getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+    printf("[%lu][D][%s:%d %s] " fmt, (unsigned long int)getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
     printf("\r\n")
 #define LOG_ERROR(fmt, ...)                                                           \
-    printf("[%lu][E][%s:%d %s] " fmt, getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+    printf("[%lu][E][%s:%d %s] " fmt, (unsigned long int)getpid(), splitFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__); \
     printf("\r\n")
 
 #else

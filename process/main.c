@@ -3,16 +3,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/time.h>
 
 const char *const inputFileName = "input.txt";
 const char *const outputFileName = "output.txt";
 static unsigned int N = 0;
 static unsigned int M = 0;
-static unsigned int pulsNumber = 0;
-static unsigned long int plusResult = 0;
+
+typedef struct
+{
+    unsigned int pulsNumber;
+    unsigned long int plusResult;
+} Plus;
 
 int parseFile(void)
 {
@@ -61,7 +66,7 @@ int parseFile(void)
     return -1;
 }
 
-int writeFile(void)
+int writeFile(unsigned long int plusResult)
 {
     FILE *pFile = NULL;
     char *pStr = NULL;
@@ -103,12 +108,12 @@ int main(int argc, char const *argv[])
 {
     int pid = -1;
     int i = 0;
-    struct timespec timeSpecStart;
-    struct timespec timeSpecEnd;
+    struct timeval timeSpecStart;
+    struct timeval timeSpecEnd;
+    int shmid = 0;
+    Plus *pPlus = NULL;
 
-    plusResult = 0;
-
-    LOG_DEBUG("Hello, gcc\n");
+    LOG_DEBUG("Hello, gcc");
 
     if (parseFile() != 0)
     {
@@ -117,7 +122,14 @@ int main(int argc, char const *argv[])
     }
     LOG_DEBUG("parse file success N = %d, M = %d", N, M);
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecStart);
+    gettimeofday(&timeSpecStart, NULL);
+
+    shmid = shmget((key_t)1234, sizeof(Plus), 0666 | IPC_CREAT);
+    if (shmid == -1)
+    {
+        LOG_ERROR("shmget failed");
+        return -1;
+    }
 
     for (i = 0; i < N - 1; i++)
     {
@@ -130,27 +142,57 @@ int main(int argc, char const *argv[])
 
     // LOG_DEBUG("pid %d", pid);
 
+    //将共享内存连接到当前进程的地址空间
+    pPlus = (Plus *)shmat(shmid, (void *)0, 0);
+    if (pPlus == (Plus *)-1)
+    {
+        LOG_ERROR("shmat fail");
+        return -1;
+    }
+
     while (1)
     {
-        unsigned int addNumber = __sync_add_and_fetch(&pulsNumber, 1);
+        unsigned int addNumber = __sync_add_and_fetch(&(pPlus->pulsNumber), 1);
         if (addNumber > M)
         {
-            __sync_sub_and_fetch(&pulsNumber, 1);
+            __sync_sub_and_fetch(&(pPlus->pulsNumber), 1);
             break;
         }
 
-        __sync_add_and_fetch(&plusResult, addNumber);
-        LOG_DEBUG("add %d", addNumber);
+        __sync_add_and_fetch(&(pPlus->plusResult), addNumber);
+        // LOG_DEBUG("add %d", addNumber);
     }
 
     if (pid != 0)
     {
         waitpid(0, NULL, 0);
-        writeFile();
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &timeSpecEnd);
+        writeFile(pPlus->plusResult);
+        gettimeofday(&timeSpecEnd, NULL);
 
-        LOG_DEBUG("result %lu", plusResult);
-        LOG_DEBUG("runtime %d s, %d ns", (timeSpecEnd.tv_sec - timeSpecStart.tv_sec), timeSpecEnd.tv_nsec - timeSpecStart.tv_nsec);
+        LOG_DEBUG("result %lu", pPlus->plusResult);
+        LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
+        //把共享内存从当前进程中分离
+        if (shmdt(pPlus) == -1)
+        {
+            LOG_ERROR("shmdt failed");
+            return -1;
+        }
+
+        //删除共享内存
+        if (shmctl(shmid, IPC_RMID, 0) == -1)
+        {
+            LOG_ERROR("shmctl(IPC_RMID) failed");
+            return -1;
+        }
+    }
+    else
+    {
+        //把共享内存从当前进程中分离
+        if (shmdt(pPlus) == -1)
+        {
+            LOG_ERROR("shmdt failed");
+            return -1;
+        }
     }
 
     return 0;
