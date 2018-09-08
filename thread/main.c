@@ -131,14 +131,14 @@ int main(int argc, char const *argv[])
 
     LOG_DEBUG("Hello, gcc");
 
-    gettimeofday(&timeSpecStart, NULL);
-
     if (parseFile() != 0)
     {
         LOG_ERROR("parse file error");
         return -1;
     }
     LOG_DEBUG("parse file success N = %d, M = %d", N, M);
+
+    gettimeofday(&timeSpecStart, NULL);
 
     // 创建线程A
     for (i = 0; i < N; i++)
@@ -160,12 +160,11 @@ int main(int argc, char const *argv[])
         }
     }
 
-    writeFile();
-
     gettimeofday(&timeSpecEnd, NULL);
 
     LOG_DEBUG("result %lu", plusResult);
     LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
 
+    writeFile();
     return 0;
 }

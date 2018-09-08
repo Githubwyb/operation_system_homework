@@ -140,8 +140,6 @@ int main(int argc, char const *argv[])
         }
     }
 
-    // LOG_DEBUG("pid %d", pid);
-
     //将共享内存连接到当前进程的地址空间
     pPlus = (Plus *)shmat(shmid, (void *)0, 0);
     if (pPlus == (Plus *)-1)
@@ -166,11 +164,13 @@ int main(int argc, char const *argv[])
     if (pid != 0)
     {
         waitpid(0, NULL, 0);
-        writeFile(pPlus->plusResult);
         gettimeofday(&timeSpecEnd, NULL);
 
         LOG_DEBUG("result %lu", pPlus->plusResult);
-        LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
+        LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000
+            + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
+
+        writeFile(pPlus->plusResult);
         //把共享内存从当前进程中分离
         if (shmdt(pPlus) == -1)
         {
