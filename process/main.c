@@ -7,6 +7,9 @@
 #include <sys/wait.h>
 #include <sys/shm.h>
 #include <sys/time.h>
+#include <sys/sem.h>
+#include <sys/ipc.h>
+#include <errno.h>
 
 const char *const inputFileName = "input.txt";
 const char *const outputFileName = "output.txt";
@@ -18,6 +21,17 @@ typedef struct
     unsigned int pulsNumber;
     unsigned long int plusResult;
 } Plus;
+
+// struct sembuf
+// {
+//     short semnum; /*信号量集合中的信号量编号，0代表第1个信号量*/
+//     short val;    /*若val>0进行V操作信号量值加val，表示进程释放控制的资源 */
+//                   /*若val<0进行P操作信号量值减val，若(semval-val)<0（semval为该信号量值），则调用进程阻塞，直到资源可用；若设置IPC_NOWAIT不会睡眠，进程直接返回EAGAIN错误*/
+//                   /*若val==0时阻塞等待信号量为0，调用进程进入睡眠状态，直到信号值为0；若设置IPC_NOWAIT，进程不会睡眠，直接返回EAGAIN错误*/
+//     short flag;   /*0 设置信号量的默认操作*/
+//                   /*IPC_NOWAIT设置信号量操作不等待*/
+//                   /*SEM_UNDO 选项会让内核记录一个与调用进程相关的UNDO记录，如果该进程崩溃，则根据这个进程的UNDO记录自动恢复相应信号量的计数值*/
+// };
 
 int parseFile(void)
 {
@@ -110,7 +124,6 @@ int main(int argc, char const *argv[])
     int i = 0;
     struct timeval timeSpecStart;
     struct timeval timeSpecEnd;
-    int shmid = 0;
     Plus *pPlus = NULL;
 
     LOG_DEBUG("Hello, gcc");
@@ -124,10 +137,31 @@ int main(int argc, char const *argv[])
 
     gettimeofday(&timeSpecStart, NULL);
 
-    shmid = shmget((key_t)1234, sizeof(Plus), 0666 | IPC_CREAT);
+    int shmid = shmget((key_t)1234, sizeof(Plus), 0666 | IPC_CREAT);
     if (shmid == -1)
     {
         LOG_ERROR("shmget failed");
+        return -1;
+    }
+
+    key_t key = ftok(".", 0x01);
+    if (key < 0)
+    {
+        LOG_ERROR("ftok failed, key %d", key);
+        return -1;
+    }
+
+    int semId = semget(key, 1, IPC_CREAT | 0600);
+    if (semId == -1)
+    {
+        LOG_ERROR("semget failed");
+        return -1;
+    }
+
+    int code = semctl(semId, 0, SETVAL, 1);
+    if (code == -1)
+    {
+        LOG_ERROR("semctl failed");
         return -1;
     }
 
@@ -150,25 +184,74 @@ int main(int argc, char const *argv[])
 
     while (1)
     {
-        unsigned int addNumber = __sync_add_and_fetch(&(pPlus->pulsNumber), 1);
-        if (addNumber > M)
+        struct sembuf signal;
+        signal.sem_op = -1;
+        signal.sem_flg = SEM_UNDO;
+        signal.sem_num = 0;
+        code = semop(semId, &signal, 1);
+        if (code == -1)
         {
-            __sync_sub_and_fetch(&(pPlus->pulsNumber), 1);
-            break;
+            LOG_ERROR("semop failed, %d, %s", errno, strerror(errno));
+            return -1;
         }
 
-        __sync_add_and_fetch(&(pPlus->plusResult), addNumber);
-        // LOG_DEBUG("add %d", addNumber);
+        // unsigned int addNumber = __sync_add_and_fetch(&(pPlus->pulsNumber), 1);
+        // if (addNumber > M)
+        // {
+        //     __sync_sub_and_fetch(&(pPlus->pulsNumber), 1);
+        //     break;
+        // }
+
+        // __sync_add_and_fetch(&(pPlus->plusResult), addNumber);
+
+        pPlus->pulsNumber++;
+        if (pPlus->pulsNumber > M)
+        {
+            pPlus->pulsNumber--;
+            signal.sem_op = 1;
+            code = semop(semId, &signal, 1);
+            if (code == -1)
+            {
+                LOG_ERROR("semop failed");
+                return -1;
+            }
+            break;
+        }
+        pPlus->plusResult += pPlus->pulsNumber;
+
+        signal.sem_op = 1;
+        code = semop(semId, &signal, 1);
+        if (code == -1)
+        {
+            LOG_ERROR("semop failed");
+            return -1;
+        }
     }
 
     if (pid != 0)
     {
-        waitpid(0, NULL, 0);
+        for (i = 0; i < N - 1; i++)
+        {
+            int status = 0;
+            pid_t pr = wait(&status);
+
+            if (WIFEXITED(status))
+            { /* 如果WIFEXITED返回非零值 */
+                if (WEXITSTATUS(status) != 0)
+                {
+                    LOG_DEBUG("the return code is %d.", WEXITSTATUS(status));
+                }
+            }
+            else
+            {
+                LOG_DEBUG("the child process %d exit abnormally.", pr);
+            }
+        }
+
         gettimeofday(&timeSpecEnd, NULL);
 
         LOG_DEBUG("result %lu", pPlus->plusResult);
-        LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000
-            + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
+        LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
 
         writeFile(pPlus->plusResult);
         //把共享内存从当前进程中分离
@@ -182,6 +265,14 @@ int main(int argc, char const *argv[])
         if (shmctl(shmid, IPC_RMID, 0) == -1)
         {
             LOG_ERROR("shmctl(IPC_RMID) failed");
+            return -1;
+        }
+
+        LOG_DEBUG("OK");
+        int code = semctl(semId, 0, IPC_RMID);
+        if (code == -1)
+        {
+            LOG_ERROR("semctl failed");
             return -1;
         }
     }
