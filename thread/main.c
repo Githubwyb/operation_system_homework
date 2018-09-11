@@ -11,8 +11,8 @@ const char *const inputFileName = "input.txt";
 const char *const outputFileName = "output.txt";
 static unsigned int N = 0;
 static unsigned int M = 0;
-static unsigned int pulsNumber = 0;
-static unsigned long int plusResult = 0;
+static unsigned long long int pulsNumber = 0;
+static unsigned long long int plusResult = 0;
 
 int parseFile(void)
 {
@@ -82,7 +82,7 @@ int writeFile(void)
             break;
         }
 
-        rc = fprintf(pFile, "%lu", plusResult);
+        rc = fprintf(pFile, "%llu", plusResult);
         if (rc <= 0)
         {
             LOG_ERROR("write file error, %d", rc);
@@ -99,24 +99,18 @@ int writeFile(void)
     return -1;
 }
 
-pthread_mutex_t m0;
-
 void *threadHandler(void *param)
 {
     while (1)
     {
-        unsigned int addNumber = 0;
-        pthread_mutex_lock(&m0);
-        if (++pulsNumber > M)
+        unsigned long long int addNumber = __sync_add_and_fetch(&pulsNumber, 1);
+        if (addNumber > M)
         {
-            pulsNumber--;
-            pthread_mutex_unlock(&m0);
+            __sync_sub_and_fetch(&pulsNumber, 1);
             return NULL;
         }
-        addNumber = pulsNumber;
-        plusResult += pulsNumber;
-        pthread_mutex_unlock(&m0);
-        // LOG_DEBUG("add %d", addNumber);
+
+        __sync_add_and_fetch(&plusResult, addNumber);
     }
 }
 
@@ -162,7 +156,7 @@ int main(int argc, char const *argv[])
 
     gettimeofday(&timeSpecEnd, NULL);
 
-    LOG_DEBUG("result %lu", plusResult);
+    LOG_DEBUG("result %llu", plusResult);
     LOG_DEBUG("runtime %lu us", (unsigned long int)((timeSpecEnd.tv_sec - timeSpecStart.tv_sec) * 1000000 + (timeSpecEnd.tv_usec - timeSpecStart.tv_usec)));
 
     writeFile();
