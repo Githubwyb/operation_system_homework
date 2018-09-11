@@ -195,15 +195,6 @@ int main(int argc, char const *argv[])
             return -1;
         }
 
-        // unsigned int addNumber = __sync_add_and_fetch(&(pPlus->pulsNumber), 1);
-        // if (addNumber > M)
-        // {
-        //     __sync_sub_and_fetch(&(pPlus->pulsNumber), 1);
-        //     break;
-        // }
-
-        // __sync_add_and_fetch(&(pPlus->plusResult), addNumber);
-
         pPlus->pulsNumber++;
         if (pPlus->pulsNumber > M)
         {
@@ -268,7 +259,6 @@ int main(int argc, char const *argv[])
             return -1;
         }
 
-        LOG_DEBUG("OK");
         int code = semctl(semId, 0, IPC_RMID);
         if (code == -1)
         {
